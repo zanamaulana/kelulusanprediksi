@@ -1,111 +1,159 @@
 import streamlit as st
 import pandas as pd
-import joblib
+import numpy as np
+import pickle # Untuk menyimpan dan memuat model
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split # Diperlukan untuk pelatihan model dummy
 
-# Gunakan st.cache_resource untuk memuat model dan encoders hanya sekali
-# Ini juga akan membantu mengisolasi masalah jika ada pemanggilan tersembunyi
-@st.cache_resource
-def load_trained_assets():
-    try:
-        model = joblib.load('prediksi_kelulusan.pkl')
-        encoders = joblib.load('encoders.pkl')
-        return model, encoders
-    except FileNotFoundError:
-        st.error("Pastikan file 'prediksi_kelulusan.pkl' dan 'encoders.pkl' berada di direktori yang sama dengan 'app.py'.")
-        st.stop()
-    except Exception as e:
-        st.error(f"Terjadi error saat memuat model atau encoders: {e}")
-        st.stop()
+# Fungsi untuk memuat dan melatih model (atau memuat model yang sudah ada)
+@st.cache_resource # Cache resource untuk menghindari pelatihan ulang setiap kali aplikasi berjalan
+def load_and_train_model():
+    # --- PENTING: GANTI BAGIAN INI DENGAN KODE ASLI PELATIHAN MODEL ANDA ---
+    # Jika Anda sudah memiliki model dan encoder yang tersimpan (misal file .pkl),
+    # Anda bisa memuatnya di sini. Contoh:
+    # try:
+    #     with open('model.pkl', 'rb') as f:
+    #         model = pickle.load(f)
+    #     with open('le_gender.pkl', 'rb') as f:
+    #         le_gender = pickle.load(f)
+    #     with open('le_status_mhs.pkl', 'rb') as f:
+    #         le_status_mhs = pickle.load(f)
+    #     with open('le_status_nikah.pkl', 'rb') as f:
+    #         le_status_nikah = pickle.load(f)
+    #     # Definisikan urutan fitur yang tepat yang diharapkan model Anda
+    #     model_features = ['Usia', 'IPK', 'IPS1', 'IPS2', 'IPS3', 'IPS4', 'IPS5', 'IPS6', 'IPS7', 'IPS8',
+    #                       'Gender_encoded', 'Status_Mahasiswa_encoded', 'Status_Nikah_encoded']
+    #     st.success("Model dan encoder berhasil dimuat dari file.")
+    #     return model, le_gender, le_status_mhs, le_status_nikah, model_features
+    # except FileNotFoundError:
+    #     st.warning("File model atau encoder tidak ditemukan. Melatih ulang model dummy...")
 
-# Panggil fungsi untuk memuat model dan encoders
-model, encoders = load_trained_assets()
+    # Data dummy yang diperluas untuk contoh pelatihan
+    # Di aplikasi nyata, Anda akan menggunakan data dari file 'Kelulusan Train.csv' Anda.
+    data = {
+        'Gender': ['Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita',
+                   'Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita', 'Pria', 'Wanita'],
+        'Status_Mahasiswa': ['Aktif', 'Aktif', 'Cuti', 'Aktif', 'Aktif', 'Aktif', 'Cuti', 'Aktif', 'Non-Aktif', 'Aktif',
+                             'Aktif', 'Aktif', 'Aktif', 'Cuti', 'Aktif', 'Aktif', 'Aktif', 'Aktif', 'Non-Aktif', 'Aktif'],
+        'Usia': [20, 21, 22, 20, 23, 21, 24, 20, 25, 22, 19, 20, 21, 22, 23, 20, 24, 21, 25, 22],
+        'Status_Nikah': ['Belum Menikah', 'Menikah', 'Belum Menikah', 'Belum Menikah', 'Menikah', 'Belum Menikah', 'Menikah', 'Belum Menikah', 'Menikah', 'Belum Menikah',
+                         'Belum Menikah', 'Belum Menikah', 'Menikah', 'Belum Menikah', 'Menikah', 'Belum Menikah', 'Belum Menikah', 'Menikah', 'Menikah', 'Belum Menikah'],
+        'IPS1': [3.5, 3.8, 2.5, 3.9, 3.0, 3.7, 3.1, 3.8, 2.0, 3.6, 3.7, 3.5, 3.8, 2.6, 3.9, 3.0, 3.2, 3.7, 2.1, 3.6],
+        'IPS2': [3.6, 3.7, 2.6, 3.8, 3.1, 3.6, 3.2, 3.7, 2.1, 3.5, 3.8, 3.6, 3.7, 2.7, 3.8, 3.1, 3.3, 3.6, 2.2, 3.5],
+        'IPS3': [3.4, 3.9, 2.4, 4.0, 2.9, 3.8, 3.0, 3.9, 1.9, 3.7, 3.6, 3.4, 3.9, 2.5, 4.0, 2.9, 3.1, 3.8, 2.0, 3.7],
+        'IPS4': [3.5, 3.8, 2.5, 3.9, 3.0, 3.7, 3.1, 3.8, 2.0, 3.6, 3.7, 3.5, 3.8, 2.6, 3.9, 3.0, 3.2, 3.7, 2.1, 3.6],
+        'IPS5': [3.6, 3.7, 2.6, 3.8, 3.1, 3.6, 3.2, 3.7, 2.1, 3.5, 3.8, 3.6, 3.7, 2.7, 3.8, 3.1, 3.3, 3.6, 2.2, 3.5],
+        'IPS6': [3.4, 3.9, 2.4, 4.0, 2.9, 3.8, 3.0, 3.9, 1.9, 3.7, 3.6, 3.4, 3.9, 2.5, 4.0, 2.9, 3.1, 3.8, 2.0, 3.7],
+        'IPS7': [3.5, 3.8, 2.5, 3.9, 3.0, 3.7, 3.1, 3.8, 2.0, 3.6, 3.7, 3.5, 3.8, 2.6, 3.9, 3.0, 3.2, 3.7, 2.1, 3.6],
+        'IPS8': [3.6, 3.7, 2.6, 3.8, 3.1, 3.6, 3.2, 3.7, 2.1, 3.5, 3.8, 3.6, 3.7, 2.7, 3.8, 3.1, 3.3, 3.6, 2.2, 3.5],
+        'IPK': [3.55, 3.80, 2.55, 3.90, 3.05, 3.70, 3.15, 3.80, 2.05, 3.65, 3.75, 3.55, 3.75, 2.65, 3.95, 3.05, 3.25, 3.75, 2.15, 3.55],
+        'Kelulusan': [1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1] # 1 untuk Lulus, 0 untuk Tidak Lulus
+    }
+    df_dummy = pd.DataFrame(data)
 
+    # Inisialisasi LabelEncoder untuk setiap kolom kategorikal
+    le_gender = LabelEncoder()
+    le_status_mahasiswa = LabelEncoder()
+    le_status_nikah = LabelEncoder()
 
+    # Fit dan transform kolom kategorikal
+    df_dummy['Gender_encoded'] = le_gender.fit_transform(df_dummy['Gender'])
+    df_dummy['Status_Mahasiswa_encoded'] = le_status_mahasiswa.fit_transform(df_dummy['Status_Mahasiswa'])
+    df_dummy['Status_Nikah_encoded'] = le_status_nikah.fit_transform(df_dummy['Status_Nikah'])
+
+    # Definisikan fitur (X) dan target (y)
+    # Pastikan urutan kolom sesuai dengan yang diharapkan model Anda saat pelatihan
+    model_features = [
+        'Usia', 'IPK',
+        'IPS1', 'IPS2', 'IPS3', 'IPS4', 'IPS5', 'IPS6', 'IPS7', 'IPS8',
+        'Gender_encoded', 'Status_Mahasiswa_encoded', 'Status_Nikah_encoded'
+    ]
+    X_dummy = df_dummy[model_features]
+    y_dummy = df_dummy['Kelulusan']
+
+    # Latih model RandomForestClassifier
+    model = RandomForestClassifier(random_state=42)
+    model.fit(X_dummy, y_dummy)
+
+    # Mengembalikan model, encoder, dan daftar fitur agar konsisten
+    return model, le_gender, le_status_mahasiswa, le_status_nikah, model_features
+
+# Muat model dan encoders (akan dilatih ulang sekali atau dimuat jika file ada)
+model, le_gender, le_status_mahasiswa, le_status_nikah, model_features = load_and_train_model()
+
+# --- Judul Aplikasi Streamlit ---
 st.title('Aplikasi Prediksi Kelulusan Mahasiswa')
-st.write('Aplikasi ini memprediksi status kelulusan mahasiswa berdasarkan beberapa fitur.')
+st.write('Isi form di bawah ini untuk memprediksi probabilitas kelulusan mahasiswa berdasarkan berbagai kriteria.')
 
-# Input fields for user
-st.sidebar.header('Input Data Mahasiswa')
+# --- Bagian Form Input ---
+st.header('Data Diri Mahasiswa')
 
-# Create a dictionary to store input values
-input_data = {}
+# Menggunakan kolom untuk tata letak yang lebih rapi
+col1, col2 = st.columns(2)
+with col1:
+    gender = st.selectbox('Jenis Kelamin', ['Pria', 'Wanita'])
+    status_mahasiswa = st.selectbox('Status Mahasiswa', ['Aktif', 'Cuti', 'Non-Aktif', 'Drop Out']) # Sesuaikan opsi jika perlu
+with col2:
+    usia = st.number_input('Usia', min_value=17, max_value=70, value=20, help="Masukkan usia mahasiswa.")
+    status_nikah = st.selectbox('Status Pernikahan', ['Belum Menikah', 'Menikah', 'Cerai', 'Janda/Duda']) # Sesuaikan opsi
 
-# Get unique values for dropdowns from encoders (if available)
-def get_unique_values(encoder_key, default_options):
-    if encoder_key in encoders:
-        return list(encoders[encoder_key].classes_)
-    return default_options
+st.header('Nilai Akademik')
+ips_values = {}
+# Menggunakan st.columns untuk tata letak input IPS yang lebih teratur
+num_ips_cols = 4 # Jumlah kolom untuk input IPS
+cols_ips = st.columns(num_ips_cols)
 
-# Numerical inputs
-input_data['UMUR'] = st.sidebar.number_input('Umur', min_value=17, max_value=60, value=20)
-input_data['IPK'] = st.sidebar.number_input('IPK', min_value=0.0, max_value=4.0, value=3.0, format="%.2f")
-input_data['JUMLAH MATA KULIAH'] = st.sidebar.number_input('Jumlah Mata Kuliah', min_value=1, max_value=200, value=100)
-input_data['SKS'] = st.sidebar.number_input('Jumlah SKS', min_value=1, max_value=300, value=144)
-input_data['TAHUN MASUK'] = st.sidebar.number_input('Tahun Masuk', min_value=2000, max_value=2025, value=2020)
+for i in range(1, 9):
+    with cols_ips[(i - 1) % num_ips_cols]: # Mendistribusikan input ke kolom
+        ips_values[f'IPS{i}'] = st.number_input(f'IPS Semester {i}', min_value=0.0, max_value=4.0, value=3.0, step=0.01, key=f'ips_{i}', help=f"Masukkan Indeks Prestasi Semester {i} (0.0 - 4.0).")
 
+ipk = st.number_input('IPK (Indeks Prestasi Kumulatif)', min_value=0.0, max_value=4.0, value=3.0, step=0.01, help="Masukkan Indeks Prestasi Kumulatif (0.0 - 4.0).")
 
-# Categorical inputs using selectbox
-jenis_kelamin_options = get_unique_values('JENIS KELAMIN', ['Laki-laki', 'Perempuan'])
-input_data['JENIS KELAMIN'] = st.sidebar.selectbox('Jenis Kelamin', jenis_kelamin_options)
-
-status_mahasiswa_options = get_unique_values('STATUS MAHASISWA', ['Aktif', 'Cuti', 'Non-aktif'])
-input_data['STATUS MAHASISWA'] = st.sidebar.selectbox('Status Mahasiswa', status_mahasiswa_options)
-
-status_nikah_options = get_unique_values('STATUS NIKAH', ['Belum Menikah', 'Menikah'])
-input_data['STATUS NIKAH'] = st.sidebar.selectbox('Status Nikah', status_nikah_options)
-
-# Convert input data to DataFrame
-input_df = pd.DataFrame([input_data])
-
-st.subheader('Data Mahasiswa yang Dimasukkan:')
-st.write(input_df)
-
-# Preprocess the input data
-processed_input_df = input_df.copy()
-for col in ['JENIS KELAMIN', 'STATUS MAHASISWA', 'STATUS NIKAH']:
-    if col in encoders:
-        try:
-            processed_input_df[col] = encoders[col].transform(processed_input_df[col])
-        except ValueError as e:
-            st.error(f"Error transforming column {col}: {e}. Pastikan input valid.")
-            st.stop()
-    else:
-        st.warning(f"Encoder for '{col}' not found. Skipping transformation for this column.")
-
-# Define the exact order of features (columns) as expected by the trained model
-expected_features = [
-    'JENIS KELAMIN', 'UMUR', 'IPK', 'JUMLAH MATA KULIAH',
-    'SKS', 'STATUS MAHASISWA', 'STATUS NIKAH', 'TAHUN MASUK'
-]
-
-# Reindex the DataFrame to match the expected feature order
-processed_input_df = processed_input_df.reindex(columns=expected_features)
-
-# Handle potential NaN values if reindex introduced them (though unlikely with current inputs)
-processed_input_df.fillna(0, inplace=True)
-
-
-st.subheader('Data Setelah Preprocessing (untuk Model):')
-st.write(processed_input_df)
-
-# Make prediction
+st.header('Prediksi Kelulusan')
+# --- Tombol Prediksi ---
 if st.button('Prediksi Kelulusan'):
-    if model:
-        prediction = model.predict(processed_input_df)
-        prediction_proba = model.predict_proba(processed_input_df)
+    try:
+        # Preprocessing input untuk fitur kategorikal menggunakan encoder yang sudah dilatih
+        gender_encoded = le_gender.transform([gender])[0]
+        status_mahasiswa_encoded = le_status_mahasiswa.transform([status_mahasiswa])[0]
+        status_nikah_encoded = le_status_nikah.transform([status_nikah])[0]
 
-        # Decode the prediction
-        status_kelulusan_encoder = encoders.get('STATUS KELULUSAN')
-        if status_kelulusan_encoder:
-            predicted_status = status_kelulusan_encoder.inverse_transform(prediction)[0]
-            st.subheader('Hasil Prediksi:')
-            st.success(f'Status Kelulusan Diprediksi: **{predicted_status}**')
+        # Siapkan data input dalam format dictionary
+        input_dict = {
+            'Usia': usia,
+            'IPK': ipk,
+            'Gender_encoded': gender_encoded,
+            'Status_Mahasiswa_encoded': status_mahasiswa_encoded,
+            'Status_Nikah_encoded': status_nikah_encoded,
+        }
+        for i in range(1, 9): # Tambahkan semua nilai IPS ke dictionary
+            input_dict[f'IPS{i}'] = ips_values[f'IPS{i}']
 
-            st.subheader('Probabilitas Prediksi:')
-            proba_df = pd.DataFrame(prediction_proba, columns=status_kelulusan_encoder.classes_)
-            st.write(proba_df)
+        # Buat DataFrame dari input pengguna, pastikan urutan kolom sesuai dengan model_features
+        # Ini penting agar model menerima input dalam urutan yang benar
+        input_data_df = pd.DataFrame([input_dict])[model_features]
+
+        # Lakukan Prediksi
+        prediction = model.predict(input_data_df)
+        prediction_proba = model.predict_proba(input_data_df) # Probabilitas untuk kedua kelas (0 dan 1)
+
+        st.subheader('Hasil Prediksi:')
+        if prediction[0] == 1:
+            st.success('Mahasiswa diprediksi *LULUS*! 🎉')
         else:
-            st.warning("Encoder untuk 'STATUS KELULUSAN' tidak ditemukan. Menampilkan hasil prediksi mentah.")
-            st.write(f"Prediksi Mentah: {prediction[0]}")
-    else:
-        st.error("Model belum dimuat. Silakan periksa kembali file model.")
+            st.error('Mahasiswa diprediksi *TIDAK LULUS*! 😔')
+
+        # Menampilkan probabilitas dengan format yang mudah dibaca
+        st.write(f"Probabilitas Lulus: *{prediction_proba[0][1]*100:.2f}%*")
+        st.write(f"Probabilitas Tidak Lulus: *{prediction_proba[0][0]*100:.2f}%*")
+
+    except ValueError as ve:
+        # Menangkap error jika nilai kategorikal tidak valid untuk encoder
+        st.error(f"Kesalahan pada input kategori: {ve}. Pastikan semua pilihan kategori valid dan sesuai dengan opsi yang tersedia.")
+    except Exception as e:
+        # Menangkap error umum lainnya
+        st.error(f"Terjadi kesalahan umum: {e}. Mohon coba lagi atau hubungi dukungan teknis.")
+
+st.markdown('---')
+st.caption('Aplikasi ini dibuat menggunakan Streamlit dan scikit-learn. Model prediksi menggunakan data dummy; untuk hasil yang akurat, gantilah dengan model yang telah dilatih pada dataset asli Anda.')
