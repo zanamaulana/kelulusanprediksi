@@ -1,50 +1,61 @@
 import streamlit as st
+import pandas as pd
 import numpy as np
 import joblib
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
 
-# Load model dan label encoder (misalnya disimpan sebelumnya)
-model = joblib.load('model_kelulusan.pkl')
-encoders = joblib.load('encoders.pkl')  # Dictionary of LabelEncoders
+# Load model jika sudah disimpan, atau latih ulang dari awal
+@st.cache_resource
+def load_model():
+    # Load data
+    df = pd.read_csv('Kelulusan Train.csv')
 
-st.title("Prediksi Kelulusan Mahasiswa")
+    # Drop kolom yang tidak digunakan
+    if 'NAMA' in df.columns:
+        df.drop(columns=['NAMA'], inplace=True)
 
-# Form input
-with st.form("form_kelulusan"):
-    ipk = st.number_input('IPK', min_value=0.0, max_value=4.0, step=0.01)
-    sks = st.number_input('Jumlah SKS', min_value=0, max_value=200, step=1)
-    masa_studi = st.number_input('Masa Studi (semester)', min_value=1, max_value=14)
-    kehadiran = st.slider('Persentase Kehadiran (%)', min_value=0, max_value=100)
+    # Encode kolom kategorikal
+    label_cols = ['JENIS KELAMIN', 'STATUS MAHASISWA', 'STATUS NIKAH', 'STATUS KELULUSAN']
+    encoders = {}
+    for col in label_cols:
+        le = LabelEncoder()
+        df[col] = le.fit_transform(df[col])
+        encoders[col] = le
 
-    jenis_kelamin = st.selectbox('Jenis Kelamin', encoders['JENIS KELAMIN'].classes_)
-    status_mahasiswa = st.selectbox('Status Mahasiswa', encoders['STATUS MAHASISWA'].classes_)
-    status_nikah = st.selectbox('Status Nikah', encoders['STATUS NIKAH'].classes_)
+    X = df.drop(columns=['STATUS KELULUSAN'])
+    y = df['STATUS KELULUSAN']
 
-    submit = st.form_submit_button("Prediksi")
+    model = RandomForestClassifier()
+    model.fit(X, y)
 
-# Ketika tombol ditekan
-if submit:
-    # Siapkan array input
-    input_dict = {
-        'IPK': ipk,
-        'SKS': sks,
-        'MASA STUDI': masa_studi,
-        'KEHADIRAN': kehadiran,
-        'JENIS KELAMIN': encoders['JENIS KELAMIN'].transform([jenis_kelamin])[0],
-        'STATUS MAHASISWA': encoders['STATUS MAHASISWA'].transform([status_mahasiswa])[0],
-        'STATUS NIKAH': encoders['STATUS NIKAH'].transform([status_nikah])[0],
-    }
+    return model, encoders
 
-    features = np.array([[input_dict[col] for col in input_dict]])
+model, encoders = load_model()
 
-    # Prediksi
-    prediction = model.predict(features)[0]
-    label = encoders['STATUS KELULUSAN'].inverse_transform([prediction])[0]
+st.title("Prediksi Status Kelulusan Mahasiswa")
 
-    # Tampilkan hasil
-    if label.lower() in ['tidak lulus', 'terlambat']:
-        st.error(f"Hasil Prediksi: {label}")
-    else:
-        st.success(f"Hasil Prediksi: {label}")
+# Input user
+jenis_kelamin = st.selectbox("Jenis Kelamin", encoders['JENIS KELAMIN'].classes_)
+status_mahasiswa = st.selectbox("Status Mahasiswa", encoders['STATUS MAHASISWA'].classes_)
+status_nikah = st.selectbox("Status Nikah", encoders['STATUS NIKAH'].classes_)
+
+# Input fitur numerik
+ipk = st.number_input("IPK", 0.0, 4.0, step=0.01)
+sks = st.number_input("Jumlah SKS", 0, 160, step=1)
+lama_studi = st.slider("Lama Studi (semester)", 0, 14, 8)
+
+# Encode input
+input_data = pd.DataFrame({
+    'JENIS KELAMIN': [encoders['JENIS KELAMIN'].transform([jenis_kelamin])[0]],
+    'STATUS MAHASISWA': [encoders['STATUS MAHASISWA'].transform([status_mahasiswa])[0]],
+    'STATUS NIKAH': [encoders['STATUS NIKAH'].transform([status_nikah])[0]],
+    'IPK': [ipk],
+    'SKS': [sks],
+    'LAMA STUDI': [lama_studi],
+})
+
+if st.button("Prediksi Kelulusan"):
+    prediction = model.predict(input_data)[0]
+    pred_label = encoders['STATUS KELULUSAN'].inverse_transform([prediction])[0]
+    st.success(f"Prediksi: Mahasiswa kemungkinan **{pred_label}**")
