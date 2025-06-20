@@ -61,18 +61,24 @@ for col in ['JENIS KELAMIN', 'STATUS MAHASISWA', 'STATUS NIKAH']:
     else:
         st.warning(f"Encoder for '{col}' not found. Skipping transformation for this column.")
 
-# Ensure columns are in the same order as during training
-# This is crucial for consistent prediction
-# Get feature names from the trained model (assuming it's a scikit-learn model)
-try:
-    feature_names = model.feature_names_in_
-    processed_input_df = processed_input_df[feature_names]
-except AttributeError:
-    st.warning("Could not retrieve feature names from the model. Please ensure the order of columns matches the training data.")
-    # Fallback: assume the order from the notebook's X definition
-    fallback_features = ['JENIS KELAMIN', 'UMUR', 'IPK', 'JUMLAH MATA KULIAH', 'SKS', 'STATUS MAHASISWA', 'STATUS NIKAH', 'TAHUN MASUK']
-    # Filter and reorder based on fallback, fill missing with 0 or a reasonable default
-    processed_input_df = processed_input_df.reindex(columns=fallback_features, fill_value=0)
+# --- START OF FIX ---
+# Define the exact order of features (columns) as expected by the trained model
+# This order comes from your X = df.drop(columns=["STATUS KELULUSAN"]) in the notebook
+expected_features = [
+    'JENIS KELAMIN', 'UMUR', 'IPK', 'JUMLAH MATA KULIAH',
+    'SKS', 'STATUS MAHASISWA', 'STATUS NIKAH', 'TAHUN MASUK'
+]
+
+# Reindex the DataFrame to match the expected feature order
+# This ensures that the model receives columns in the correct sequence.
+# Use .reindex() and then .fillna(0) for any potential missing columns if input_df was incomplete,
+# although with all st.number_input/selectbox, all should be present.
+processed_input_df = processed_input_df.reindex(columns=expected_features)
+
+# Handle potential NaN values if reindex introduced them (though unlikely with current inputs)
+# For simplicity, filling with 0, but consider better imputation if applicable.
+processed_input_df.fillna(0, inplace=True)
+# --- END OF FIX ---
 
 
 st.subheader('Data Setelah Preprocessing (untuk Model):')
